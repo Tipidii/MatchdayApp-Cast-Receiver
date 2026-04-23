@@ -5,9 +5,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Security-Policy" 
-          content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; 
-                   media-src * http: https: blob:;
-                   connect-src * http: https: ws: wss:;">
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;
+               media-src * http: https: blob: data:;
+               connect-src * http: https: ws: wss:;
+               img-src * http: https: data: blob:;">
+
+    <meta http-equiv="Content-Security-Policy-Report-Only" content="upgrade-insecure-requests">
     
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     
