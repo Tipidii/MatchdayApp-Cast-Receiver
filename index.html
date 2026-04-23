@@ -169,33 +169,43 @@
                 const media = loadRequestData.media;
                 console.log('MatchDay: Load request received');
                 console.log('MatchDay: Content URL:', media.contentUrl);
-                console.log('MatchDay: Content type:', media.contentType);
-                console.log('MatchDay: Stream type:', media.streamType);
-
+        
                 if (!media || !media.contentUrl) {
                     console.error('MatchDay: No content URL');
                     return null;
                 }
-
+        
                 const title = media.metadata && media.metadata.title
                     ? media.metadata.title
                     : 'Live Channel';
-
+        
                 showLoading(title);
-
-                // Force correct content type for HLS
+        
                 media.contentType = 'application/x-mpegURL';
-
-                // Force live stream type
                 media.streamType = cast.framework.messages.StreamType.LIVE;
-
-                // Disable credentials for HTTP streams
+        
+                // Explicitly configure for HTTP streams
+                if (!loadRequestData.playbackConfig) {
+                    loadRequestData.playbackConfig = new cast.framework.PlaybackConfig();
+                }
+                
+                loadRequestData.playbackConfig.manifestRequestHandler = requestInfo => {
+                    requestInfo.withCredentials = false;
+                    // Allow HTTP URLs
+                    console.log('MatchDay: Manifest request:', requestInfo.url);
+                    return requestInfo;
+                };
+        
+                loadRequestData.playbackConfig.segmentRequestHandler = requestInfo => {
+                    requestInfo.withCredentials = false;
+                    console.log('MatchDay: Segment request:', requestInfo.url);
+                    return requestInfo;
+                };
+        
                 loadRequestData.credentials = null;
                 loadRequestData.credentialsType = null;
-
-                // Jump to live edge
                 loadRequestData.currentTime = -1;
-
+        
                 return loadRequestData;
             }
         );
@@ -328,7 +338,8 @@
                 cast.framework.messages.Command.QUEUE_PREV |
                 cast.framework.messages.Command.QUEUE_NEXT |
                 cast.framework.messages.Command.STREAM_TRANSFER,
-            touchScreenOptimizedApp: false
+            touchScreenOptimizedApp: false,
+            enforceSupportedBitrate: false
         });
 
         console.log('MatchDay: Receiver started');
