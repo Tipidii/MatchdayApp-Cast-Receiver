@@ -4,13 +4,11 @@
     <title>MatchDay Receiver</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Allow mixed content -->
     <meta http-equiv="Content-Security-Policy" 
-      content="default-src * 'unsafe-inline' 'unsafe-eval'; 
-               media-src * http: https:;">
-
+          content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; 
+                   media-src * http: https: blob:;
+                   connect-src * http: https: ws: wss:;">
     
-    <!-- Cast Receiver Framework v3 -->
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     
     <style>
@@ -29,7 +27,6 @@
             overflow: hidden;
         }
 
-        /* Cast built-in media player */
         cast-media-player {
             width: 100%;
             height: 100%;
@@ -38,7 +35,6 @@
             --splash-image: none;
         }
 
-        /* Overlay shown during loading/errors */
         #overlay {
             display: none;
             position: fixed;
@@ -86,7 +82,6 @@
             display: none;
         }
 
-        /* Live indicator */
         #live-badge {
             display: none;
             position: fixed;
@@ -106,7 +101,6 @@
             display: block;
         }
 
-        /* Buffering spinner */
         #spinner {
             width: 48px;
             height: 48px;
@@ -154,53 +148,53 @@
         // ─── Playback Config ──────────────────────────────────────────────
         const playbackConfig = new cast.framework.PlaybackConfig();
 
-        // Retry config for live streams
         playbackConfig.manifestRequestHandler = requestInfo => {
             requestInfo.withCredentials = false;
+            console.log('MatchDay: Manifest request:', requestInfo.url);
+            return requestInfo;
         };
 
-        // Segment retry — important for live streams that may have gaps
         playbackConfig.segmentRequestHandler = requestInfo => {
             requestInfo.withCredentials = false;
+            return requestInfo;
         };
 
-        // Start as close to live edge as possible
         playbackConfig.autoResumeDuration = 5;
         playbackConfig.autoResumeNumberOfSegments = 1;
 
         // ─── Message Interceptors ─────────────────────────────────────────
-        // Intercept LOAD to customise stream handling
         playerManager.setMessageInterceptor(
             cast.framework.messages.MessageType.LOAD,
             loadRequestData => {
-                console.log('MatchDay: Loading media:', 
-                    JSON.stringify(loadRequestData.media));
-
                 const media = loadRequestData.media;
+                console.log('MatchDay: Load request received');
+                console.log('MatchDay: Content URL:', media.contentUrl);
+                console.log('MatchDay: Content type:', media.contentType);
+                console.log('MatchDay: Stream type:', media.streamType);
 
                 if (!media || !media.contentUrl) {
-                    console.error('MatchDay: No content URL provided');
+                    console.error('MatchDay: No content URL');
                     return null;
                 }
 
-                // Show loading UI
-                const title = media.metadata && media.metadata.title 
-                    ? media.metadata.title 
+                const title = media.metadata && media.metadata.title
+                    ? media.metadata.title
                     : 'Live Channel';
-                    
+
                 showLoading(title);
 
-                // Force HLS content type if URL ends in .m3u8
-                if (media.contentUrl.includes('.m3u8') && 
-                    (!media.contentType || media.contentType === 'video/mp4')) {
-                    media.contentType = 'application/x-mpegURL';
-                    console.log('MatchDay: Corrected content type to HLS');
-                }
+                // Force correct content type for HLS
+                media.contentType = 'application/x-mpegURL';
 
-                // Set live stream break clip management
-                if (media.streamType === cast.framework.messages.StreamType.LIVE) {
-                    loadRequestData.currentTime = -1; // jump to live edge
-                }
+                // Force live stream type
+                media.streamType = cast.framework.messages.StreamType.LIVE;
+
+                // Disable credentials for HTTP streams
+                loadRequestData.credentials = null;
+                loadRequestData.credentialsType = null;
+
+                // Jump to live edge
+                loadRequestData.currentTime = -1;
 
                 return loadRequestData;
             }
@@ -240,12 +234,15 @@
         playerManager.addEventListener(
             cast.framework.events.EventType.ERROR,
             event => {
+                console.error('MatchDay: ERROR event');
                 console.error('MatchDay: Error:', JSON.stringify(event));
-                showError(
-                    'Stream error — code ' + (event.detailedErrorCode || event.error)
-                );
+                console.error('MatchDay: Detailed code:', event.detailedErrorCode);
+                console.error('MatchDay: Error reason:', event.reason);
+                showError('Stream error — code ' + (event.detailedErrorCode || event.error));
+
                 // Auto retry after 5 seconds
                 setTimeout(() => {
+                    console.log('MatchDay: Retrying...');
                     playerManager.seek({ currentTime: -1 });
                     playerManager.play();
                 }, 5000);
@@ -256,10 +253,9 @@
             cast.framework.events.EventType.MEDIA_FINISHED,
             event => {
                 console.log('MatchDay: Media finished:', event.endedReason);
-                if (event.endedReason === 
+                if (event.endedReason ===
                     cast.framework.events.EndedReason.ERROR) {
                     showError('Stream ended unexpectedly — retrying...');
-                    // Retry for live streams
                     setTimeout(() => {
                         playerManager.seek({ currentTime: -1 });
                         playerManager.play();
@@ -270,10 +266,13 @@
             }
         );
 
+        // Log all events except TIME_UPDATE for debugging
         playerManager.addEventListener(
-            cast.framework.events.EventType.REQUEST_SEEK,
-            () => {
-                console.log('MatchDay: Seek requested');
+            cast.framework.events.EventType.ALL,
+            event => {
+                if (event.type !== cast.framework.events.EventType.TIME_UPDATE) {
+                    console.log('MatchDay: Event:', event.type, JSON.stringify(event));
+                }
             }
         );
 
@@ -322,9 +321,6 @@
         }
 
         // ─── Start receiver ───────────────────────────────────────────────
-        const castReceiverOptions = new cast.framework.CastReceiverOptions();
-        castReceiverOptions.skipPlayersForPerformance = false;
-        
         context.start({
             playbackConfig: playbackConfig,
             supportedCommands:
