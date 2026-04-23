@@ -153,12 +153,16 @@
 
         playbackConfig.manifestRequestHandler = requestInfo => {
             requestInfo.withCredentials = false;
+            requestInfo.headers = requestInfo.headers || {};
+            requestInfo.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36';
             console.log('MatchDay: Manifest request:', requestInfo.url);
             return requestInfo;
         };
-
+        
         playbackConfig.segmentRequestHandler = requestInfo => {
             requestInfo.withCredentials = false;
+            requestInfo.headers = requestInfo.headers || {};
+            requestInfo.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36';
             return requestInfo;
         };
 
