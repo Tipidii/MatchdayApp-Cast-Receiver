@@ -5,15 +5,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Security-Policy" 
-      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;
-               media-src * http: https: blob: data:;
-               connect-src * http: https: ws: wss:;
-               img-src * http: https: data: blob:;">
-
-    <meta http-equiv="Content-Security-Policy-Report-Only" content="upgrade-insecure-requests">
+          content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; 
+                   media-src * http: https: blob:;
+                   connect-src * http: https: ws: wss:;
+                   img-src * http: https: data: blob:;">
     
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    
+
     <style>
         * {
             margin: 0;
@@ -148,26 +146,38 @@
         const errorText = document.getElementById('error-text');
         const liveBadge = document.getElementById('live-badge');
 
+        const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+
         // ─── Playback Config ──────────────────────────────────────────────
         const playbackConfig = new cast.framework.PlaybackConfig();
 
         playbackConfig.manifestRequestHandler = requestInfo => {
             requestInfo.withCredentials = false;
             requestInfo.headers = requestInfo.headers || {};
-            requestInfo.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36';
+            requestInfo.headers['User-Agent'] = UA;
             console.log('MatchDay: Manifest request:', requestInfo.url);
             return requestInfo;
         };
-        
+
         playbackConfig.segmentRequestHandler = requestInfo => {
             requestInfo.withCredentials = false;
             requestInfo.headers = requestInfo.headers || {};
-            requestInfo.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36';
+            requestInfo.headers['User-Agent'] = UA;
+            console.log('MatchDay: Segment request:', requestInfo.url);
+            return requestInfo;
+        };
+
+        playbackConfig.licenseRequestHandler = requestInfo => {
+            requestInfo.withCredentials = false;
             return requestInfo;
         };
 
         playbackConfig.autoResumeDuration = 5;
         playbackConfig.autoResumeNumberOfSegments = 1;
+
+        // ─── Use Shaka Player (routes requests through JS handlers) ──────
+        const shakaFactory = new cast.framework.ShakaFactory();
+        context.setPlayerFactory(shakaFactory);
 
         // ─── Message Interceptors ─────────────────────────────────────────
         playerManager.setMessageInterceptor(
@@ -176,43 +186,32 @@
                 const media = loadRequestData.media;
                 console.log('MatchDay: Load request received');
                 console.log('MatchDay: Content URL:', media.contentUrl);
-        
+                console.log('MatchDay: Content type:', media.contentType);
+
                 if (!media || !media.contentUrl) {
                     console.error('MatchDay: No content URL');
                     return null;
                 }
-        
+
                 const title = media.metadata && media.metadata.title
                     ? media.metadata.title
                     : 'Live Channel';
-        
+
                 showLoading(title);
-        
+
+                // Force HLS content type
                 media.contentType = 'application/x-mpegURL';
+
+                // Force live stream
                 media.streamType = cast.framework.messages.StreamType.LIVE;
-        
-                // Explicitly configure for HTTP streams
-                if (!loadRequestData.playbackConfig) {
-                    loadRequestData.playbackConfig = new cast.framework.PlaybackConfig();
-                }
-                
-                loadRequestData.playbackConfig.manifestRequestHandler = requestInfo => {
-                    requestInfo.withCredentials = false;
-                    // Allow HTTP URLs
-                    console.log('MatchDay: Manifest request:', requestInfo.url);
-                    return requestInfo;
-                };
-        
-                loadRequestData.playbackConfig.segmentRequestHandler = requestInfo => {
-                    requestInfo.withCredentials = false;
-                    console.log('MatchDay: Segment request:', requestInfo.url);
-                    return requestInfo;
-                };
-        
+
+                // No credentials
                 loadRequestData.credentials = null;
                 loadRequestData.credentialsType = null;
+
+                // Jump to live edge
                 loadRequestData.currentTime = -1;
-        
+
                 return loadRequestData;
             }
         );
@@ -257,7 +256,6 @@
                 console.error('MatchDay: Error reason:', event.reason);
                 showError('Stream error — code ' + (event.detailedErrorCode || event.error));
 
-                // Auto retry after 5 seconds
                 setTimeout(() => {
                     console.log('MatchDay: Retrying...');
                     playerManager.seek({ currentTime: -1 });
@@ -270,8 +268,7 @@
             cast.framework.events.EventType.MEDIA_FINISHED,
             event => {
                 console.log('MatchDay: Media finished:', event.endedReason);
-                if (event.endedReason ===
-                    cast.framework.events.EndedReason.ERROR) {
+                if (event.endedReason === cast.framework.events.EndedReason.ERROR) {
                     showError('Stream ended unexpectedly — retrying...');
                     setTimeout(() => {
                         playerManager.seek({ currentTime: -1 });
@@ -283,7 +280,7 @@
             }
         );
 
-        // Log all events except TIME_UPDATE for debugging
+        // Log all events except TIME_UPDATE
         playerManager.addEventListener(
             cast.framework.events.EventType.ALL,
             event => {
@@ -345,11 +342,10 @@
                 cast.framework.messages.Command.QUEUE_PREV |
                 cast.framework.messages.Command.QUEUE_NEXT |
                 cast.framework.messages.Command.STREAM_TRANSFER,
-            touchScreenOptimizedApp: false,
-            enforceSupportedBitrate: false
+            touchScreenOptimizedApp: false
         });
 
-        console.log('MatchDay: Receiver started');
+        console.log('MatchDay: Receiver started with Shaka Player');
     </script>
 </body>
 </html>
