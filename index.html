@@ -10,6 +10,8 @@
                    connect-src * http: https: ws: wss:;">
     
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.6/shaka-player.compiled.js"></script>
+
     
     <style>
         * {
@@ -147,6 +149,9 @@
 
         // ─── Playback Config ──────────────────────────────────────────────
         const playbackConfig = new cast.framework.PlaybackConfig();
+
+        // Use Shaka for HLS which handles CORS differently
+        playbackConfig.factory = new cast.framework.ShakaFactory();
 
         playbackConfig.manifestRequestHandler = requestInfo => {
             requestInfo.withCredentials = false;
